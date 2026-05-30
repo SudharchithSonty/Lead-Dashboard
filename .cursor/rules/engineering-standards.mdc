@@ -1,0 +1,599 @@
+---
+alwaysApply: true
+---
+
+# Production Engineering Standards
+
+You are assisting a senior engineer with ~10 years of experience. Never produce naive, tutorial-quality, or "first thing that works" code. Every output must be defensive, concurrency-safe, observable, and production-ready.
+
+---
+
+## 0. Philosophy
+
+### Craftsmanship Over Output
+
+**RULE — Think, Then Build**: Do not reach for the first solution that compiles. Question every assumption. Consider what the most elegant solution looks like if designed from zero. Then justify why the pragmatic solution you choose is the right tradeoff.
+
+**RULE — Obsess Over the Codebase**: Read the existing code like you are studying architecture. Understand the patterns, the philosophy, the data flow, and the naming idioms before touching anything. Git history tells the story of *why* things are the way they are -- `git log` and `git blame` are investigation tools, not archaeology.
+
+**RULE — Plan Before You Type**: Before writing a single line, sketch the approach mentally. If the change touches more than two files, write the plan down. A solution should feel inevitable to anyone reading it, not accidental.
+
+**RULE — Craft, Don't Code**: Every function name should sing. Every abstraction should feel natural, like it was always part of the language. Every edge case should be handled with grace, not with a TODO comment. If a name does not immediately communicate intent, rename it. If an abstraction requires explanation, simplify it. TDD is not bureaucracy -- it is a commitment to excellence.
+
+**RULE — Simplify Ruthlessly**: If there is a way to remove complexity without losing capability, take it. The goal is not "nothing left to add" but "nothing left to take away." Fewer abstractions, fewer indirections, fewer moving parts.
+
+**RULE — Iterate, Don't Ship Draft One**: The first version is a sketch. Run the tests. Read the diff. Look for unnecessary coupling, unclear names, missing edge cases. Refine until the code is not just working but *clean*.
+
+**RULE — Leave It Better**: Every file you touch should be better when you leave it. Fix the adjacent lint warning. Improve the unclear variable name. Add the missing type hint. Small improvements compound.
+
+**RULE — Solve the Real Problem**: The stated problem is often a symptom. Dig one level deeper. If someone asks for a retry wrapper, ask whether the root cause is a missing timeout, a flaky dependency, or a design issue.
+
+**RULE — Persist Through Impossibility**: When a problem seems impossible or a constraint feels immovable, that is the signal to think harder, not to give up. Reframe the constraint. Challenge the assumption. Explore the orthogonal approach. Say "here's how we can" before ever saying "we can't."
+
+### Tools as Instruments
+
+**RULE — Master Your Tools**: Use the terminal, shell commands, IDE integrations, and the full tool suite like a virtuoso uses their instruments. The right tool used precisely is worth more than brute-force code. Know when `rg` is faster than reading, when `git log --oneline --graph` reveals the design story, when `curl` proves more than a unit test.
+
+**RULE — Git History Is Context**: `git log`, `git blame`, and `git diff` are investigation tools. Before changing code you did not write, read the commit history to understand *why* it was written that way. Honor the intent even if you improve the implementation.
+
+**RULE — Visual Mocks Are Specifications**: When images, screenshots, or design mocks are provided, they are not loose suggestions. They are pixel-level specifications. Match layout, spacing, color, and typography precisely. Deviations require explicit justification.
+
+**RULE — Parallelize Where Possible**: When independent tasks can be run concurrently -- searching multiple directories, reading unrelated files, running lint and tests side by side -- do so. Use subagents or parallel tool calls to explore, implement, and verify simultaneously. Parallelism is not redundancy; it is breadth of thought.
+
+### Human Workflow Integration
+
+**RULE — Intuitive, Not Mechanical**: Code and solutions should work seamlessly with the human's existing workflow. Do not force the human to adapt to the tool. The tool adapts to the human.
+
+**RULE — Show, Don't Just Tell**: When proposing a solution, demonstrate why it is the right one. Run the tests, show the output, display the diff. Make the human *see* the improvement, not just read about it.
+
+### Engineering Preferences
+
+These preferences guide every tradeoff decision:
+
+- **DRY is non-negotiable** — Flag repetition aggressively. If logic exists in two places, it will diverge.
+- **Explicit over clever** — A 10-line function everyone can read beats a 3-line one-liner that requires a PhD to parse.
+- **More edge cases, not fewer** — Thoughtfulness over speed. Handle the empty list, the None, the duplicate, the concurrent write. Assume Murphy's Law.
+- **"Engineered enough"** — Not under-engineered (fragile, hacky, no validation) and not over-engineered (premature abstraction, unnecessary indirection, patterns for patterns' sake).
+- **Well-tested is non-negotiable** — Too many tests is better than too few. If you are unsure whether a test is worth writing, write it.
+
+### Codebase Awareness
+
+**RULE — Read Before Write**: ALWAYS read and understand the relevant parts of the codebase before making any change. Map the file structure, data flow, and existing conventions first. Never introduce patterns that contradict what already exists unless explicitly refactoring.
+
+**RULE — Minimal Blast Radius**: Make the smallest change that solves the problem. Do not introduce new abstractions, frameworks, or layers unless the task explicitly requires it. Prefer extending existing patterns over inventing new ones.
+
+**RULE — Follow Existing Conventions**: Match the codebase's naming, structure, error handling, and test patterns. If the project uses `snake_case` routes, do not introduce `camelCase`. If it uses raw SQL, do not introduce an ORM mid-flight.
+
+### Failure-Scenario Thinking
+
+Before writing any code, reason through these failure modes:
+
+- What happens if a downstream service is unreachable, slow, or returns a 500?
+- What happens if the database has no data, stale data, or duplicate rows?
+- What happens if the request payload is malformed, empty, or has unexpected types?
+- What happens under concurrent load (50+ simultaneous requests)?
+- Could this be abused (injection, unauthorized access, resource exhaustion)?
+- How would an on-call engineer debug this at 3 AM with only logs?
+- What happens during a partial failure (2 of 3 writes succeed)?
+- Is this operation idempotent? What happens if it runs twice?
+
+### Code Review Lens
+
+When reviewing or writing code, systematically evaluate across five dimensions:
+
+1. **Correctness** — Logic errors, off-by-one, race conditions, type mismatches, wrong SQL, unhandled edge cases (empty input, `None`, duplicates, boundary values).
+2. **Reliability** — Missing timeouts, no retries for transient failures, wrong connection pooling, missing transaction boundaries, no graceful degradation.
+3. **Security** — SQL injection, missing input validation, secrets in source, missing auth, permissive CORS, unsanitized user input in shell/eval/templates, missing rate limits.
+4. **Performance** — N+1 queries, full table scans, missing indexes, unbounded result sets, blocking I/O on async paths, redundant serialization, missing caching for hot paths.
+5. **Maintainability** — No logging, hardcoded config, missing types, god functions, no tests, unclear naming, dead code, tight coupling.
+
+---
+
+## 1. Project State File
+
+For multi-session or complex tasks, maintain a `CONTINUITY.md` at the workspace root. This is the single source of truth for project context -- what the goal is, what decisions have been made, and where things stand.
+
+### When to Use
+
+- Tasks spanning multiple chat sessions or multiple days.
+- Complex features where losing track of decisions or progress would cause rework.
+- Not needed for quick, self-contained changes.
+
+### Protocol
+
+- **When resuming work or starting a complex task**: Read `CONTINUITY.md` first, update it if the goal or state has changed, then proceed.
+- **Update triggers**: Goal changes, constraints shift, key decisions made, progress milestones reached, or unexpected discoveries.
+- **Format**: Facts only, no transcripts. Prefer bullets. Mark uncertainty as `UNCONFIRMED`. Never guess.
+- **If context seems incomplete**: Rebuild the state file from what is visible (code, git log, open files), mark gaps as `UNCONFIRMED`, ask up to 3 targeted questions, then continue.
+
+### Relationship to Task Plans
+
+- **Short-term execution** (what to do in the next 30 minutes) belongs in a todo list or plan.
+- **Long-running context** (what are we building, why, what did we already decide) belongs in `CONTINUITY.md`.
+- Keep them consistent.
+
+### Format
+
+```markdown
+# Continuity Ledger
+
+## Goal
+<!-- What are we building and what does success look like -->
+
+## Constraints / Assumptions
+
+## Key Decisions
+
+## State
+### Done
+### Now
+### Next
+```
+
+---
+
+## 2. Backend & Data Integrity (Python / FastAPI / SQLAlchemy)
+
+### Database
+
+**RULE — Connection Pooling**: Use `NullPool` for SQLite in concurrent environments. Use `QueuePool` for PostgreSQL/MySQL. NEVER use `StaticPool` for multi-threaded apps.
+
+**RULE — ID Generation**: Use database-native sequences (`SERIAL`, `AUTOINCREMENT`, `uuid_generate_v4()`). NEVER use `MAX(id) + 1`.
+
+**RULE — Transactions**: Wrap all multi-step write operations in an explicit context-managed transaction (`with db.begin():`). If any step fails, the entire operation rolls back.
+
+**RULE — Migrations**: Schema changes go through migration tools (Alembic, Django migrations). Never run raw `ALTER TABLE` in application code.
+
+**RULE — Parameterized Queries**: NEVER use f-strings or `.format()` to build SQL. Always use parameterized queries or ORM methods.
+
+```python
+# WRONG — SQL injection vector
+cursor.execute(f"SELECT * FROM users WHERE email = '{email}'")
+
+# CORRECT
+cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
+```
+
+**RULE — Indexes**: Any column used in `WHERE`, `JOIN`, `ORDER BY`, or `UNIQUE` constraints should have an index. Verify with `EXPLAIN ANALYZE` for critical queries.
+
+**RULE — Optimistic Locking**: For update-heavy resources with concurrent access, use a `version` column or `updated_at` check rather than pessimistic locks that block readers.
+
+### Error Handling
+
+**RULE — Loud Failures**: Never catch an exception only to return `None`, empty strings, or empty lists. Log with full context (operation name, entity IDs, input summary), then re-raise or return a structured error.
+
+```python
+# WRONG
+try:
+    result = risky_operation()
+except Exception:
+    return None
+
+# CORRECT
+try:
+    result = risky_operation()
+except SpecificException as e:
+    logger.error(f"risky_operation failed for item_id={item_id}: {e}")
+    raise
+```
+
+**RULE — Exception Granularity**: Catch the narrowest exception type possible. `except Exception` is almost always wrong. `except (ConnectionError, TimeoutError)` is right.
+
+**RULE — Structured Error Responses**: API errors return a consistent JSON shape: `{"detail": str, "code": str}` at minimum. Never return raw exception messages or stack traces to clients in production.
+
+### External Calls
+
+**RULE — Timeouts**: Every external call (HTTP, DB, cache, LLM, SMTP) MUST have an explicit timeout. Default: 5 seconds. Adjust per-service based on SLAs.
+
+```python
+response = requests.get(url, headers=headers, timeout=10)
+response.raise_for_status()
+```
+
+**RULE — Retries with Backoff**: Transient failures (network blips, 502/503/429) should be retried with exponential backoff + jitter. Use `tenacity` or `urllib3.Retry`. Never retry non-idempotent operations blindly.
+
+```python
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+    retry=retry_if_exception_type((ConnectionError, TimeoutError)),
+)
+def call_model_service(payload: dict) -> dict:
+    resp = requests.post(MODEL_URL, json=payload, timeout=5)
+    resp.raise_for_status()
+    return resp.json()
+```
+
+**RULE — Circuit Breakers**: For critical downstream services, implement circuit breaker logic. If a service fails N times in a window, stop calling it and return a degraded response instead of cascading failures.
+
+**RULE — Graceful Degradation**: When an optional downstream service is unavailable, return partial results with a warning rather than a 500. When a required service is down, return a clear 503 with a `Retry-After` header.
+
+### API Design
+
+**RULE — Boundary Validation**: Validate all input at the API boundary using Pydantic models with strict types. Business logic should never receive unvalidated data.
+
+**RULE — Response DTOs**: Never return raw ORM/database models to clients. Map to explicit response schemas that control exactly which fields are exposed.
+
+**RULE — Pagination**: Every list endpoint MUST support pagination (`limit`/`offset` or cursor-based). Default limit should be reasonable (20-100). Never return unbounded result sets.
+
+**RULE — Idempotency**: Write endpoints should be idempotent where possible. Use idempotency keys for operations like payment creation. `PUT` replaces, `PATCH` merges, `POST` creates.
+
+**RULE — Consistent Status Codes**: `200` success, `201` created, `204` deleted, `400` bad input, `401` not authenticated, `403` not authorized, `404` not found, `409` conflict, `422` validation error, `429` rate limited, `500` server error, `503` downstream unavailable.
+
+**RULE — Versioning**: API breaking changes go behind a version prefix (`/v1/`, `/v2/`). Never silently change a response shape that existing clients depend on.
+
+### Async & Concurrency
+
+**RULE — Null-Safe Access**: Use chained null-checks for all optional relationships and foreign keys before attribute access. Use `Optional` types and guard clauses.
+
+**RULE — Async/Sync Boundary**: Never call blocking I/O (synchronous `requests`, `time.sleep`, synchronous file I/O) from an `async def` function without `run_in_executor`. It blocks the event loop.
+
+**RULE — Thread Safety**: Shared mutable state (module-level dicts, caches, counters) must be protected with `threading.Lock` or use `queue.Queue`. Prefer immutable data structures.
+
+**RULE — Background Tasks**: Long-running operations (sending emails, processing files, calling slow APIs) go into a background task queue (Celery, ARQ, FastAPI `BackgroundTasks`), never inline in a request handler.
+
+---
+
+## 3. Frontend Standards (TypeScript / React / Next.js)
+
+### Static Analysis
+
+**RULE**: All TypeScript must pass `tsc --noEmit` with `strict: true`.
+
+**RULE**: All frontend code must pass `eslint` (with `@typescript-eslint/recommended-requiring-type-checking`) and `prettier`.
+
+**RULE**: Never use `any`. Use `unknown` and perform type-guarding before access.
+
+**RULE**: Validate API responses at the network boundary with `Zod` or `Yup` before passing data to components. Never trust that a backend response matches your expected type.
+
+### UX
+
+**RULE**: Every async operation MUST have explicit `isLoading`, `isError`, and `isEmpty` state handling. Never leave a UI in a silent loading state.
+
+**RULE**: No hardcoded paths, API URLs, or config strings. Use a central `config.ts` or `.env` variables.
+
+**RULE**: Optimistic UI updates must have a rollback path. If the server rejects the mutation, the UI must revert to the previous state and show an error.
+
+### State & Rendering
+
+**RULE**: Do not store derived data in state. Compute it from source state. If `fullName` = `first + last`, do not store `fullName` separately.
+
+**RULE**: Use `React.memo`, `useMemo`, and `useCallback` only when profiling proves a performance problem. Do not prematurely optimize.
+
+**RULE**: Keys in lists must be stable, unique identifiers (database IDs). Never use array index as key for dynamic lists.
+
+---
+
+## 4. General Code Quality
+
+### API Consumption
+
+**RULE — Pagination**: When calling paginated API endpoints, ALWAYS fetch all pages, not just the first.
+
+```python
+def get_all_items(url: str, headers: Dict[str, str]) -> List[Dict]:
+    all_items: List[Dict] = []
+    page = 1
+    while True:
+        response = requests.get(
+            url, params={"page": page, "page_size": 50},
+            headers=headers, timeout=10,
+        )
+        response.raise_for_status()
+        data = response.json()
+        items = data.get("data", []) if isinstance(data, dict) else data
+        all_items.extend(items)
+        if len(items) < 50:
+            break
+        page += 1
+    return all_items
+```
+
+**RULE — Authentication**: ALL authenticated requests MUST include proper auth headers. Never send empty headers to an authenticated endpoint.
+
+**RULE — Status Checks**: Always call `response.raise_for_status()` or explicitly check status codes. Never blindly call `.json()` on a response that might be a 4xx/5xx.
+
+### Python Discipline
+
+**RULE — Imports**: All imports at the top of the file. Never inside functions or behind conditionals.
+
+**RULE — No Debug Prints**: No `print(f"DEBUG: ...")` in committed code. Use `logging` at the appropriate level (`debug`, `info`, `warning`, `error`).
+
+**RULE — Type Hints**: Use type hints for all function parameters and return values. Use `Optional[X]` (or `X | None`) when the value can be `None`. Use `TypedDict` or Pydantic for complex dict structures rather than `Dict[str, Any]`.
+
+**RULE — Descriptive Names**: Functions describe their action (`find_user_by_email`, `calculate_total_pressure`). Variables describe their content (`user_count`, not `n`; `retry_delay_seconds`, not `d`). Boolean names read as questions (`is_valid`, `has_permission`).
+
+**RULE — No Mutable Default Arguments**: Never use mutable defaults (`def f(items=[])` or `def f(config={})`). Use `None` and create inside the function.
+
+```python
+# WRONG — shared mutable default
+def process(items: List[str] = []) -> List[str]:
+    items.append("new")
+    return items
+
+# CORRECT
+def process(items: Optional[List[str]] = None) -> List[str]:
+    items = items or []
+    items.append("new")
+    return items
+```
+
+**RULE — Enums Over Magic Strings**: Use `Enum` or `Literal` for fixed sets of values. Never scatter raw string comparisons (`if status == "active"`) across the codebase.
+
+```python
+from enum import Enum
+
+class Status(Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    SUSPENDED = "suspended"
+```
+
+**RULE — Pathlib Over String Concatenation**: Use `pathlib.Path` for file system operations. Never build paths with `os.path.join` or f-strings.
+
+**RULE — Context Managers for Resources**: Files, DB connections, locks, and temp directories must use `with` statements. Never rely on garbage collection to close resources.
+
+**RULE — Small Functions**: Functions should do one thing. If a function exceeds ~30 lines, it likely needs decomposition. If it takes more than 4-5 parameters, introduce a dataclass/Pydantic model.
+
+**RULE — Early Returns**: Flatten deeply nested conditionals using guard clauses and early returns. Three or more levels of nesting is a code smell.
+
+```python
+# WRONG — deep nesting
+def process(user):
+    if user:
+        if user.is_active:
+            if user.has_permission:
+                return do_work(user)
+    return None
+
+# CORRECT — guard clauses
+def process(user: Optional[User]) -> Optional[Result]:
+    if not user:
+        return None
+    if not user.is_active:
+        return None
+    if not user.has_permission:
+        return None
+    return do_work(user)
+```
+
+**RULE — No Code Duplication**: Before writing a utility function, search the codebase. If logic exists in two places, extract it. DRY violations are bugs waiting to diverge.
+
+**RULE — Generators for Large Data**: When processing large datasets, use generators/iterators to avoid loading everything into memory at once.
+
+```python
+def read_large_csv(path: Path) -> Iterator[Dict[str, str]]:
+    with open(path) as f:
+        reader = csv.DictReader(f)
+        yield from reader
+```
+
+**RULE — Dataclasses Over Raw Dicts**: When a dictionary has a known shape, model it as a `dataclass`, `TypedDict`, or Pydantic `BaseModel`. Stringly-typed code is fragile code.
+
+**RULE — Single Source of Truth for Constants**: Magic numbers and repeated string literals get a named constant at module level or in a constants file. `MAX_RETRIES = 3` reads; `3` scattered across four files does not.
+
+---
+
+## 5. Security
+
+**RULE — Never Log Secrets**: Never log passwords, tokens, API keys, session IDs, or PII. Mask or redact before logging.
+
+**RULE — Secrets in Environment**: All secrets, API keys, and credentials live in environment variables or a secrets manager. Zero secrets in source code, config files, or comments.
+
+**RULE — Input Sanitization**: All user-supplied input is untrusted. Validate type, length, format, and range at the boundary. Never pass raw user input to SQL, shell commands, file paths, or template engines.
+
+**RULE — CORS**: Configure CORS explicitly with the narrowest allowed origins. Never use `allow_origins=["*"]` in production.
+
+**RULE — Dependency Auditing**: Regularly audit dependencies for known vulnerabilities (`pip-audit`, `npm audit`). Pin major versions in production.
+
+**RULE — Rate Limiting**: Public-facing and authentication endpoints must have rate limits to prevent brute-force and DoS.
+
+---
+
+## 6. Observability
+
+**RULE — Structured Logging**: Use structured logging (key-value pairs or JSON) with a consistent format. Every log entry should include: timestamp, level, logger name, and a correlation/request ID.
+
+```python
+import logging
+logger = logging.getLogger(__name__)
+
+logger.info(
+    "prediction_requested",
+    extra={"user_id": user_id, "model_version": model.version, "input_features": len(features)},
+)
+```
+
+**RULE — Log at the Right Level**: `DEBUG` for internal state during development. `INFO` for business events (user created, prediction served). `WARNING` for recoverable issues (retry succeeded, fallback used). `ERROR` for failures that need attention. `CRITICAL` for system-wide failures.
+
+**RULE — Health Checks**: Every service exposes a `/health` endpoint that verifies connectivity to its critical dependencies (database, cache, downstream services). Return `200` if healthy, `503` if degraded, with details.
+
+**RULE — Metrics**: Instrument critical paths with latency, throughput, and error rate metrics. At minimum: request duration histogram, error counter by status code, queue depth for background tasks.
+
+---
+
+## 7. Testing Strategy
+
+**RULE — TDD**: Define test cases (Red phase) before implementing logic (Green phase). Tests are not an afterthought.
+
+**RULE — Test Pyramid**:
+
+1. **Unit Tests** — Pure logic, no I/O (Pytest / Jest / Vitest).
+2. **Integration Tests** — API endpoints with real DB, mocked external services (TestClient + test DB).
+3. **E2E Tests** — Full user journeys through the real stack (Playwright / Cypress).
+
+**RULE — Test Isolation**: Each test creates its own data and cleans up after itself. Tests must not depend on execution order or shared mutable state.
+
+**RULE — Concurrency Verification**: For any new write endpoint, run a concurrency smoke test (e.g., `hey -n 100 -c 10`) to verify thread safety and absence of deadlocks.
+
+**RULE — Edge Case Coverage**: Tests must cover: empty input, `None`/`null`, boundary values (0, -1, MAX_INT), duplicate submissions, malformed payloads, and concurrent access. When in doubt, write the test.
+
+**RULE — Test Behavior, Not Implementation**: Assert on outputs and side effects, not on which internal method was called. Tests should survive refactoring of internals.
+
+**RULE — Existing Tests Must Pass**: Run the full test suite after every change. Never break existing tests to add a feature.
+
+---
+
+## 8. Bug-Fixing Protocol ("Fix-It-Thrice")
+
+When fixing a bug, deliver all three:
+
+### 8a. The Reproducer
+
+A test that **fails loudly** when the bug is present, exercising the exact conditions that caused the failure.
+
+```python
+import concurrent.futures
+import requests
+
+BASE_URL = "http://localhost:8000/api/v1"
+
+def test_reproduce_race_condition():
+    """Fails if duplicate IDs are generated under concurrency."""
+    def create_item():
+        resp = requests.post(f"{BASE_URL}/items", json={"name": "Race Test"}, timeout=5)
+        resp.raise_for_status()
+        return resp.json()["id"]
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
+        ids = list(executor.map(lambda _: create_item(), range(50)))
+
+    assert len(ids) == len(set(ids)), f"Duplicate IDs found: {ids}"
+```
+
+### 8b. The Structural Fix
+
+Fix the **pattern**, not the symptom:
+
+- **Wrong**: Adding an `if` check to handle the error after it occurs.
+- **Right**: Switching to `SERIAL` columns / `NullPool` to make the error structurally impossible.
+
+### 8c. The Regression Gate
+
+A permanent test in the suite using internal test utilities (e.g., `TestClient`), not external `requests`.
+
+```python
+from fastapi.testclient import TestClient
+from app.main import app
+
+client = TestClient(app)
+
+def test_regression_no_duplicate_ids():
+    """Ensures the structural fix remains intact."""
+    bad_response = client.post("/items", json={"name": None})
+    assert bad_response.status_code == 422
+
+    good_response = client.post("/items", json={"name": "Valid"})
+    assert good_response.status_code in (200, 201)
+    assert "id" in good_response.json()
+```
+
+### 8d. Anti-Pattern CI Gate
+
+```bash
+rg "MAX\(id" ./app && exit 1 || echo "No manual ID generation found."
+rg "StaticPool" ./app && exit 1 || echo "Database pooling is safe."
+```
+
+---
+
+## 9. Checklists
+
+### Pre-Development
+
+- [ ] Failure scenarios reasoned through (downstream down, empty data, concurrent writes, malformed input)?
+- [ ] Failing test case written (TDD Red phase)?
+- [ ] Connection pool type confirmed (`NullPool` for SQLite, `QueuePool` for Postgres)?
+- [ ] ID generation uses database-native sequences?
+- [ ] Pydantic/Zod schemas defined with strict types for all inputs?
+- [ ] Operation is idempotent or has an idempotency key?
+- [ ] Schema changes use migration tool, not raw DDL?
+- [ ] Is this the simplest design that handles the known edge cases?
+
+### Implementation
+
+- [ ] Every `try/except` catches the narrowest type, logs with context, and re-raises or returns a structured error?
+- [ ] Multi-step writes wrapped in a context-managed transaction?
+- [ ] Null-safe access on all optional relationships and foreign keys?
+- [ ] Every external call has an explicit timeout and retry strategy for transient failures?
+- [ ] Zero hardcoded paths, secrets, or magic strings (use `settings` / `.env` / `Enum`)?
+- [ ] All imports at top of file?
+- [ ] Type hints on all function signatures?
+- [ ] Paginated endpoints fetch all pages on the client, serve bounded pages on the server?
+- [ ] All authenticated calls include auth headers?
+- [ ] No mutable default arguments?
+- [ ] No raw ORM models returned to clients (use response DTOs)?
+- [ ] No SQL built with f-strings (use parameterized queries)?
+- [ ] No blocking I/O in async functions?
+- [ ] No secrets logged?
+- [ ] No code duplication (searched codebase for existing helpers)?
+- [ ] Frontend handles `isLoading`, `isError`, and `isEmpty`?
+
+### Verification
+
+- [ ] `rg "MAX\(id|StaticPool" ./app` returns zero results?
+- [ ] `pip-audit` returns zero known vulnerabilities (or documented risk acceptance with mitigation)?
+- [ ] Backend passes `mypy --strict` / Frontend passes `tsc --noEmit`?
+- [ ] Zero violations from `ruff` (backend) / `eslint` (frontend)?
+- [ ] Endpoint survives `hey -n 100 -c 10` without 500s or deadlocks?
+- [ ] Edge cases tested (empty, null, duplicate, boundary, concurrent)?
+- [ ] Existing test suite still passes?
+- [ ] No DEBUG print statements remain?
+- [ ] `/health` endpoint verifies all dependencies?
+- [ ] Read the diff one more time -- is there anything left to simplify?
+
+### Code Review
+
+- [ ] No manual ID generation (`MAX(id) + 1`)
+- [ ] No wrong pool type (`StaticPool` for SQLite)
+- [ ] No hardcoded paths, secrets, or configuration
+- [ ] No silent exception handling (`except: pass`, `except Exception: return None`)
+- [ ] No missing input validation at the boundary
+- [ ] No missing timeouts on external calls
+- [ ] No missing transaction boundaries
+- [ ] No missing null checks before attribute access
+- [ ] No raw database models returned to clients
+- [ ] No SQL injection vectors (f-string SQL)
+- [ ] No blocking I/O in async code paths
+- [ ] No mutable default arguments
+- [ ] No secrets or PII in logs
+- [ ] No unnecessary complexity or premature abstraction
+
+---
+
+## 10. CI / Deployment Template
+
+### GitHub Actions (`.github/workflows/verify.yml`)
+
+```yaml
+name: Reliability Gate
+on: [push, pull_request]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Backend Static Analysis
+        run: |
+          pip install mypy ruff pip-audit
+          mypy . --strict
+          ruff check .
+          pip-audit
+      - name: Frontend Static Analysis
+        run: |
+          npm install
+          npm run lint
+          npm run type-check
+          npm audit --audit-level=high
+      - name: Tests
+        run: |
+          pytest tests/ -x --tb=short
+          npx playwright test
+      - name: Anti-Pattern Gate
+        run: |
+          ! rg "MAX\(id" ./app
+          ! rg "StaticPool" ./app
+          ! rg "allow_origins=\[.\*.\]" ./app
+```

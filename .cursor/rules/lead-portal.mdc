@@ -1,0 +1,110 @@
+---
+alwaysApply: true
+---
+
+# Lead Distribution Portal -- Project Rules
+
+Condensed engineering standards for this specific project. These are the subset of the full engineering-standards.mdc that directly apply to this codebase. When in doubt, the full standards document is the source of truth.
+
+---
+
+## Stack & Conventions
+
+- **Backend**: Python 3.13 / FastAPI / SQLAlchemy 2.x / SQLite with `NullPool` / Pydantic v2 / httpx
+- **Frontend**: Next.js (App Router) / React 19 / TypeScript `strict: true` / Tailwind CSS / Zod v4
+- **Tests**: pytest (backend) / Vitest + Testing Library (frontend) / TDD workflow (Red-Green-Refactor)
+- **Workflow**: `make setup`, `make dev`, `make test`, `make verify`
+- **Python naming**: `snake_case` everywhere. Enums for fixed value sets. Pydantic models at all boundaries.
+- **TypeScript naming**: `camelCase` for variables/functions, `PascalCase` for components/types.
+
+---
+
+## Architecture Invariants
+
+1. **Flow is one-directional**: Form -> FastAPI -> (local DB + HubSpot CRM). Dashboard reads from FastAPI only. Dashboard never writes to HubSpot directly.
+2. **SSE for real-time**: Server-Sent Events from `GET /api/leads/stream`. No WebSockets, no polling.
+3. **HubSpot sync is fire-and-recover**: Lead creation always succeeds locally. HubSpot failure marks `sync_status = FAILED` with the error recorded -- it never blocks the 201 response.
+4. **Boundary validation on both sides**: Pydantic on the backend, Zod on the frontend. Never trust data that hasn't passed a schema.
+5. **Response DTOs, not ORM models**: `LeadResponse`, `AnalyticsResponse`, `HubSpotStatusResponse` are the only shapes that leave the backend.
+
+---
+
+## Non-Negotiable Backend Rules
+
+- **NullPool for SQLite**. Never `StaticPool`. Never `QueuePool` for SQLite.
+- **Database-native autoincrement IDs**. Never `MAX(id) + 1`.
+- **Explicit timeouts** on all httpx calls (default 10s for HubSpot).
+- **Narrow exception handling**: `httpx.TimeoutException`, `httpx.HTTPStatusError`, `httpx.HTTPError` -- never bare `except Exception`.
+- **Structured logging** with `extra={}` dict. Never `print()`.
+- **All secrets from environment** via `pydantic-settings`. Zero hardcoded tokens.
+- **CORS locked to `settings.cors_origin`**. Never `["*"]`.
+- **Blocking I/O off the event loop**: HubSpot sync runs via `asyncio.to_thread()`.
+- **Pagination bounded**: `MAX_PAGE_SIZE = 100`, enforced via `Query(..., le=MAX_PAGE_SIZE)`.
+- **Corporate email enforcement**: Free email domains (gmail, yahoo, etc.) rejected at the Pydantic validator.
+
+---
+
+## Non-Negotiable Frontend Rules
+
+- **`strict: true`** in tsconfig. No `any`. No `as unknown as X` escape hatches.
+- **Zod at the network boundary**: Every `fetch` response is `.parse()`d before it touches React state.
+- **Explicit async states**: Every data-fetching component handles `isLoading`, `isError`, and empty/null.
+- **No hardcoded URLs**: API base comes from `NEXT_PUBLIC_API_URL` via `lib/config.ts`.
+- **Stable keys**: `lead.id` (database ID), never array index.
+- **SSE cleanup**: `EventSource.close()` in the `useEffect` cleanup function.
+
+---
+
+## Testing Rules
+
+- **Write tests first**. The failing test defines the behavior. The implementation makes it pass.
+- **Backend test isolation**: Each test gets a fresh SQLite database via `conftest.py` `setup_db` fixture. HubSpot calls are always mocked.
+- **Frontend test isolation**: Components tested in isolation with props. No network calls in unit tests.
+- **Edge cases are mandatory**: blank strings, null fields, invalid email, invalid budget enum, HubSpot timeout, HubSpot 4xx/5xx.
+- **55 tests minimum** (32 backend + 23 frontend) must pass before any merge.
+
+---
+
+## Verification Gate
+
+Before any feature is considered done:
+
+```bash
+make lint        # ruff (backend) + eslint (frontend)
+make type-check  # mypy --strict (backend) + tsc --noEmit (frontend)
+make test        # pytest + vitest
+make verify      # all of the above + anti-pattern audit
+```
+
+Anti-pattern audit checks for zero matches of: `MAX(id`, `StaticPool`, `allow_origins=["*"]`.
+
+---
+
+## File Map (key files only)
+
+```text
+backend/
+  app/
+    main.py          -- FastAPI app, CORS, router registration
+    config.py        -- pydantic-settings, reads .env
+    db.py            -- engine (NullPool), SessionLocal, get_db()
+    models.py        -- Lead SQLAlchemy model, BudgetBucket/SyncStatus enums
+    schemas.py       -- Pydantic request/response DTOs, email validation
+    broadcast.py     -- In-memory SSE EventBroadcaster
+    routes/
+      leads.py       -- POST /api/leads, GET /api/leads, GET /api/leads/stream
+      analytics.py   -- GET /api/analytics
+      hubspot_status.py -- GET /api/hubspot/status
+    services/
+      hubspot.py     -- sync_contact(), check_connection(), HubSpotSyncError
+  tests/             -- conftest.py + test_*.py files
+
+frontend/
+  app/page.tsx       -- Main SPA: form + dashboard + SSE subscription
+  components/        -- LeadForm, LeadFeed, AnalyticsBadges, HubSpotStatus
+  lib/
+    config.ts        -- API_BASE_URL, ENDPOINTS, BUDGET_OPTIONS
+    schemas.ts       -- Zod schemas mirroring backend DTOs
+    api.ts           -- fetch wrappers with Zod parsing
+  __tests__/         -- Vitest component and schema tests
+```
