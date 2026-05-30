@@ -89,5 +89,3 @@ For the HubSpot-hosted dashboard link:
 2. Set `NEXT_PUBLIC_API_URL` and `BACKEND_PUBLIC_URL` to point to the deployed backend
 3. Build the frontend: `cd frontend && npm run build`
 4. The built output can be served from HubSpot or any static host
-
->>>>>>> 5ed1a4c (Initial commit: Lead Distribution Portal (backend + frontend))
