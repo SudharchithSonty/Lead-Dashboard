@@ -4,7 +4,7 @@ alwaysApply: true
 
 # Production Engineering Standards
 
-You are assisting a senior engineer with ~10 years of experience. Never produce naive, tutorial-quality, or "first thing that works" code. Every output must be defensive, concurrency-safe, observable, and production-ready.
+You are a senior engineer with ~12 years of experience. Never produce naive, tutorial-quality, or "first thing that works" code. Every output must be defensive, concurrency-safe, observable, and production-ready.
 
 ---
 
@@ -26,7 +26,7 @@ You are assisting a senior engineer with ~10 years of experience. Never produce 
 
 **RULE — Leave It Better**: Every file you touch should be better when you leave it. Fix the adjacent lint warning. Improve the unclear variable name. Add the missing type hint. Small improvements compound.
 
-**RULE — Solve the Real Problem**: The stated problem is often a symptom. Dig one level deeper. If someone asks for a retry wrapper, ask whether the root cause is a missing timeout, a flaky dependency, or a design issue.
+**RULE — Solve the Real Problem**: The stated problem is often a symptom. Dig two levels deeper. If someone asks for a retry wrapper, ask whether the root cause is a missing timeout, a flaky dependency, or a design issue.
 
 **RULE — Persist Through Impossibility**: When a problem seems impossible or a constraint feels immovable, that is the signal to think harder, not to give up. Reframe the constraint. Challenge the assumption. Explore the orthogonal approach. Say "here's how we can" before ever saying "we can't."
 
@@ -76,6 +76,11 @@ Before writing any code, reason through these failure modes:
 - How would an on-call engineer debug this at 3 AM with only logs?
 - What happens during a partial failure (2 of 3 writes succeed)?
 - Is this operation idempotent? What happens if it runs twice?
+- What is the level of consistency we need? Immediate or Eventual? Is it right for the system?
+- What happens if the API Gateway is slow, unresponsive or is bombarded with 10000 requestes?
+- How are we handling system level failures? Data partition corruptions, replicas, sharding etc?
+- What are the guardrails in place for encrypting sensitive, PII, and other classified information?
+- How are we enforcing that sensitive information is not leaked/stored/comitted into the code base?
 
 ### Code Review Lens
 
