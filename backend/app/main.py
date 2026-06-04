@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.db import engine
+from app.lifespan import app_lifespan
 from app.models import Base
 from app.routes.leads import router as leads_router
 from app.routes.analytics import router as analytics_router
@@ -10,7 +11,11 @@ from app.routes.hubspot_status import router as hubspot_router
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Lead Distribution Portal", version="1.0.0")
+app = FastAPI(
+    title="Lead Distribution Portal",
+    version="1.0.0",
+    lifespan=app_lifespan,
+)
 
 app.add_middleware(
     CORSMiddleware,

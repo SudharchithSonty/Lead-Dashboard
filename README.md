@@ -44,7 +44,7 @@ The backend runs at `http://localhost:8000` and the frontend at `http://localhos
 | Target            | Description                                           |
 | ----------------- | ----------------------------------------------------- |
 | `make setup`      | Create Python venv, install backend + frontend deps   |
-| `make dev`        | Start backend (port 8000) and frontend (port 3000)    |
+| `make dev`        | Start backend (waits for /health), then frontend      |
 | `make backend-dev`| Start only the FastAPI backend                        |
 | `make frontend-dev`| Start only the Next.js frontend                      |
 | `make test`       | Run all backend and frontend tests                    |
@@ -52,6 +52,23 @@ The backend runs at `http://localhost:8000` and the frontend at `http://localhos
 | `make type-check` | Run mypy (backend) and tsc (frontend)                 |
 | `make verify`     | Full verification: lint + type-check + tests + audit  |
 | `make clean`      | Remove venv, node_modules, .next, and DB files        |
+
+## macOS `MallocStackLogging` messages
+
+These lines are **not** from FastAPI, React, or HubSpot code. macOS prints them when a terminal (often **Cursor** or Xcode) inherits malloc debug environment variables and any subprocess starts (`node`, `python`, `curl`, `dirname`, etc.).
+
+**What in this repo touches it**
+
+| File | Role |
+| ---- | ---- |
+| `scripts/dev.sh` | Spawns `curl`, `lsof`, `uvicorn`, `npm` |
+| `frontend/scripts/dev.sh` | Spawns `npx next dev` (many Node workers) |
+| `Makefile` | All targets run via `scripts/run.sh` |
+| `scripts/run.sh` + `scripts/lib/macos_malloc_sanitize.sh` | Clears debug env and filters `MallocStackLogging:` stderr on macOS |
+
+**Not a cause:** `__dirname` in `frontend/vitest.config.ts` is a JavaScript path constant — it does not run the `/usr/bin/dirname` command.
+
+Do not run `npm run dev` or `next dev` directly unless you use the wrapped scripts above.
 
 ## Running Tests
 
@@ -74,6 +91,7 @@ See `.env.example` for all available configuration. Key variables:
 - `HUBSPOT_PORTAL_ID` - Your HubSpot portal ID
 - `CORS_ORIGIN` - Allowed frontend origin (default: `http://localhost:3000`)
 - `NEXT_PUBLIC_API_URL` - Backend URL for the frontend (default: `http://localhost:8000`)
+- `LEAD_RETENTION_HOURS` - Auto-delete leads older than this (default: `24`)
 
 ## HubSpot Setup
 

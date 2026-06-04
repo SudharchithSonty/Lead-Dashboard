@@ -2,9 +2,11 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.db import get_db
 from app.models import BudgetBucket, Lead
 from app.schemas import AnalyticsResponse
+from app.services.lead_retention import purge_expired_leads
 
 router = APIRouter()
 
@@ -17,6 +19,8 @@ BUDGET_VALUE_MAP: dict[str, int] = {
 
 @router.get("/analytics", response_model=AnalyticsResponse)
 def get_analytics(db: Session = Depends(get_db)) -> AnalyticsResponse:
+    if settings.lead_retention_enabled:
+        purge_expired_leads(db, retention_hours=settings.lead_retention_hours)
     rows = (
         db.query(Lead.budget, func.count(Lead.id))
         .group_by(Lead.budget)

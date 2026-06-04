@@ -3,12 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint",
-    "type-check": "tsc --noEmit",
-    "test": "vitest"
+    "dev": "bash scripts/dev.sh",
+    "dev:internal": "npx next dev",
+    "build": "bash ../scripts/run.sh next build",
+    "start": "bash ../scripts/run.sh next start",
+    "lint": "bash ../scripts/run.sh eslint",
+    "type-check": "bash ../scripts/run.sh tsc --noEmit",
+    "test": "bash ../scripts/run.sh vitest"
   },
   "dependencies": {
     "next": "16.2.6",

@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     cors_origin: str = "http://localhost:3000"
     backend_host: str = "0.0.0.0"
     backend_port: int = 8000
+    lead_retention_hours: int = 24
+    lead_retention_poll_seconds: int = 900
+    lead_retention_enabled: bool = True
 
     model_config = {
         "env_file": "../.env",

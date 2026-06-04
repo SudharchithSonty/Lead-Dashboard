@@ -6,6 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool
 
+from app.config import settings
 from app.db import get_db
 from app.main import app
 from app.models import Base
@@ -18,6 +19,12 @@ engine = create_engine(
     connect_args={"check_same_thread": False},
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+@pytest.fixture(autouse=True)
+def disable_lead_retention(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tests use isolated DB; disable background retention and request-time purges."""
+    monkeypatch.setattr(settings, "lead_retention_enabled", False)
 
 
 @pytest.fixture(autouse=True)

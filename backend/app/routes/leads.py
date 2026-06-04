@@ -8,16 +8,23 @@ from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
 from app.broadcast import broadcaster
+from app.config import settings
 from app.db import get_db
 from app.models import Lead, SyncStatus
 from app.schemas import LeadCreate, LeadResponse
 from app.services.hubspot import HubSpotSyncError, sync_contact
+from app.services.lead_retention import purge_expired_leads
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 MAX_PAGE_SIZE = 100
 DEFAULT_PAGE_SIZE = 50
+
+
+def _purge_stale_leads(db: Session) -> None:
+    if settings.lead_retention_enabled:
+        purge_expired_leads(db, retention_hours=settings.lead_retention_hours)
 
 
 @router.post("/leads", response_model=LeadResponse, status_code=201)
@@ -71,6 +78,7 @@ def list_leads(
     limit: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     db: Session = Depends(get_db),
 ) -> list[Lead]:
+    _purge_stale_leads(db)
     return (
         db.query(Lead)
         .order_by(Lead.created_at.desc())
