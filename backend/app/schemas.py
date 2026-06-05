@@ -1,7 +1,7 @@
 import datetime
 import re
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_serializer, field_validator
 
 from app.models import BudgetBucket, SyncStatus
 
@@ -57,6 +57,12 @@ class LeadResponse(BaseModel):
     updated_at: datetime.datetime
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("created_at", "updated_at")
+    def serialize_as_utc(self, dt: datetime.datetime) -> str:
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=datetime.timezone.utc)
+        return dt.isoformat()
 
 
 class AnalyticsResponse(BaseModel):

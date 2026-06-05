@@ -82,6 +82,43 @@ class TestHubSpotSync:
 
     @patch("app.services.hubspot.settings")
     @patch("app.services.hubspot.httpx.Client")
+    def test_conflict_409_returns_existing_contact_id(
+        self, mock_client_cls: MagicMock, mock_settings: MagicMock
+    ) -> None:
+        """409 means the contact already exists; treat it as a successful upsert."""
+        mock_settings.hubspot_access_token = "test-token"
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+
+        conflict_body = {
+            "status": "error",
+            "message": "Contact already exists. Existing ID: 493731693243",
+            "category": "CONFLICT",
+        }
+        mock_response = MagicMock()
+        mock_response.status_code = 409
+        mock_response.json.return_value = conflict_body
+        mock_response.text = str(conflict_body)
+        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "conflict", request=MagicMock(), response=mock_response
+        )
+        mock_client.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+
+        result = sync_contact(
+            email="test@corp.com",
+            first_name="T",
+            last_name="U",
+            company="C",
+            budget="under_10k",
+        )
+
+        assert isinstance(result, HubSpotSyncResult)
+        assert result.contact_id == "493731693243"
+
+    @patch("app.services.hubspot.settings")
+    @patch("app.services.hubspot.httpx.Client")
     def test_http_error_raises_sync_error(
         self, mock_client_cls: MagicMock, mock_settings: MagicMock
     ) -> None:

@@ -18,6 +18,7 @@ interface LeadFeedProps {
   error: string | null;
   highlightLeadIds?: number[];
   onAddLead?: () => void;
+  now?: number;
 }
 
 function FeedSkeleton() {
@@ -122,6 +123,7 @@ export default function LeadFeed({
   error,
   highlightLeadIds = [],
   onAddLead,
+  now,
 }: LeadFeedProps) {
   if (isLoading) {
     return (
@@ -209,7 +211,7 @@ export default function LeadFeed({
                       {lead.first_name} {lead.last_name}
                     </p>
                     <span className="shrink-0 text-xs text-gray-400">
-                      {formatRelativeTime(lead.created_at)}
+                      {formatRelativeTime(lead.created_at, now)}
                     </span>
                   </div>
                   <p className="truncate text-sm text-gray-600">{lead.email}</p>
@@ -281,7 +283,7 @@ export default function LeadFeed({
                     <SyncBadge lead={lead} />
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-400">
-                    {formatRelativeTime(lead.created_at)}
+                    {formatRelativeTime(lead.created_at, now)}
                   </td>
                 </tr>
               );

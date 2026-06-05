@@ -78,6 +78,20 @@ class TestLeadIngestion:
         assert resp.json()["email"] == "jane@acmecorp.com"
 
     @patch("app.routes.leads.sync_contact")
+    def test_created_at_has_utc_timezone(
+        self, mock_sync: object, client: TestClient
+    ) -> None:
+        """created_at must include UTC timezone so JS parses it correctly."""
+        mock_sync.return_value = HubSpotSyncResult(contact_id="hs-tz")  # type: ignore[attr-defined]
+        resp = client.post("/api/leads", json=VALID_LEAD)
+        assert resp.status_code == 201
+        created_at = resp.json()["created_at"]
+        # Must end with +00:00 or Z so browsers don't misinterpret as local time.
+        assert created_at.endswith("+00:00") or created_at.endswith("Z"), (
+            f"created_at missing UTC marker: {created_at!r}"
+        )
+
+    @patch("app.routes.leads.sync_contact")
     def test_list_leads_pagination(
         self, mock_sync: object, client: TestClient
     ) -> None:

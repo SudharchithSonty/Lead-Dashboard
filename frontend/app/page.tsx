@@ -31,6 +31,8 @@ export default function Home() {
   const [hubspotStatus, setHubspotStatus] = useState<HSStatus | null>(null);
   const [highlightLeadIds, setHighlightLeadIds] = useState<number[]>([]);
 
+  const [now, setNow] = useState(() => Date.now());
+
   const [leadsLoading, setLeadsLoading] = useState(true);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [hsLoading, setHsLoading] = useState(true);
@@ -39,6 +41,11 @@ export default function Home() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const highlightTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(
@@ -293,6 +300,7 @@ export default function Home() {
                   error={leadsError}
                   highlightLeadIds={highlightLeadIds}
                   onAddLead={handleOpenForm}
+                  now={now}
                 />
               </div>
             </section>

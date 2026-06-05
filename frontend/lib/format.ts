@@ -19,7 +19,10 @@ export function formatSyncStatus(status: string): string {
 }
 
 export function formatRelativeTime(isoDate: string, now = Date.now()): string {
-  const then = new Date(isoDate).getTime();
+  // Naive strings (no Z or UTC offset) are SQLite UTC timestamps. Appending Z
+  // forces JS to parse them as UTC instead of local time.
+  const normalized = /Z|[+-]\d{2}:\d{2}$/.test(isoDate) ? isoDate : `${isoDate}Z`;
+  const then = new Date(normalized).getTime();
   if (Number.isNaN(then)) return "";
 
   const diffSec = Math.floor((now - then) / 1000);

@@ -1,4 +1,5 @@
 import logging
+import re
 from dataclasses import dataclass
 
 import httpx
@@ -21,6 +22,19 @@ class HubSpotSyncError(Exception):
 @dataclass(frozen=True)
 class HubSpotSyncResult:
     contact_id: str
+
+
+_CONFLICT_ID_RE = re.compile(r"Existing ID:\s*(\d+)", re.IGNORECASE)
+
+
+def _parse_conflict_id(response: httpx.Response) -> str | None:
+    """Extract the existing contact ID from a HubSpot 409 response body."""
+    try:
+        message = response.json().get("message", "")
+    except Exception:
+        message = response.text
+    match = _CONFLICT_ID_RE.search(message)
+    return match.group(1) if match else None
 
 
 def _get_headers() -> dict[str, str]:
@@ -67,6 +81,14 @@ def sync_contact(
         logger.error("hubspot_sync_timeout", extra={"email": email, "error": str(exc)})
         raise HubSpotSyncError(f"HubSpot request timed out: {exc}") from exc
     except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 409:
+            existing_id = _parse_conflict_id(exc.response)
+            if existing_id:
+                logger.info(
+                    "hubspot_contact_already_exists",
+                    extra={"email": email, "existing_id": existing_id},
+                )
+                return HubSpotSyncResult(contact_id=existing_id)
         logger.error(
             "hubspot_sync_http_error",
             extra={

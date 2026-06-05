@@ -2,17 +2,6 @@
 # Reliable dev startup: backend must be healthy before the frontend starts.
 set -euo pipefail
 
-if [[ "${OSTYPE:-}" == darwin* ]]; then
-  unset MallocStackLogging MallocStackLoggingNoCompact MallocScribble MallocPreScribble 2>/dev/null || true
-  export MallocStackLogging=0
-  [[ "${MallocNanoZone-}" == "0" ]] && unset MallocNanoZone
-fi
-
-_LIB_DIR="$(cd "${0%/*}/lib" && pwd)"
-# shellcheck source=lib/macos_malloc_sanitize.sh
-source "${_LIB_DIR}/macos_malloc_sanitize.sh"
-macos_sanitize_malloc_env
-
 ROOT="$(cd "${0%/*}/.." && pwd)"
 cd "$ROOT"
 
@@ -59,19 +48,23 @@ wait_for_backend() {
 
 start_backend() {
   if port_in_use "$BACKEND_PORT"; then
-    if curl -sf "$HEALTH_URL" >/dev/null 2>&1; then
-      echo "✔ Backend already healthy on :${BACKEND_PORT}"
-      return 0
-    fi
-    echo "✗ Port ${BACKEND_PORT} is in use but ${HEALTH_URL} did not respond."
-    echo "  Free the port: lsof -ti :${BACKEND_PORT} | xargs kill"
-    exit 1
+    echo "→ Backend already on :${BACKEND_PORT} — stopping it …"
+    lsof -ti ":${BACKEND_PORT}" | xargs kill 2>/dev/null || true
+    local wait_secs=0
+    while port_in_use "$BACKEND_PORT"; do
+      sleep 0.2
+      (( wait_secs++ ))
+      if (( wait_secs > 25 )); then
+        echo "✗ Port ${BACKEND_PORT} did not free up after 5s."
+        exit 1
+      fi
+    done
+    echo "  Port ${BACKEND_PORT} is now free."
   fi
 
   echo "→ Starting backend on :${BACKEND_PORT} …"
   cd "${ROOT}/backend"
-  macos_exec_sanitized_background \
-    "$PYTHON" -m uvicorn app.main:app --reload --host 0.0.0.0 --port "$BACKEND_PORT"
+  "$PYTHON" -m uvicorn app.main:app --reload --host 0.0.0.0 --port "$BACKEND_PORT" &
   BACKEND_PID=$!
   cd "$ROOT"
 
@@ -88,7 +81,7 @@ start_frontend() {
   echo "→ Starting frontend on :${FRONTEND_PORT} …"
   echo "  Open http://localhost:${FRONTEND_PORT}"
   cd "${ROOT}/frontend"
-  macos_exec_sanitized npm run dev:internal
+  npm run dev:internal
 }
 
 echo "Lead Distribution Portal — dev mode"
